@@ -38,7 +38,7 @@ class ReplayBuffer(object):
 
         # Ensure that the most recent transition is in the returned batch.
         sample_indices.append(self.curr_pointer - 1)
-        for i in xrange(self.batch_size - 1):
+        for i in range(self.batch_size - 1):
             sample_indices.append(random.randint(0, self.curr_size - 1))
 
         returned_states = []
@@ -47,7 +47,7 @@ class ReplayBuffer(object):
         returned_next_states = []
         returned_terminals = []
 
-        for i in xrange(len(sample_indices)):
+        for i in range(len(sample_indices)):
             index = sample_indices[i]
             returned_states.append(self.states[index])
             returned_actions.append(self.actions[index])

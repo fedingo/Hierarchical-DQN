@@ -7,7 +7,7 @@ https://arxiv.org/pdf/1604.06057.pdf
 from collections import defaultdict
 from dqn import DqnAgent
 import numpy as np
-from qLearning import QLearningAgent
+#from qLearning import QLearningAgent
 import sys
 
 
@@ -36,14 +36,14 @@ class HierarchicalDqnAgent(object):
             check_subgoal_fn: function that checks if agent has satisfied a particular subgoal.
         """
 
-        self._meta_controller = DqnAgent(state_dims=state_sizes[0],
+        self._meta_controller = DqnAgent(state_dims=state_sizes,
             num_actions=num_subgoals,
             learning_rate=learning_rates[0],
             epsilon_end=0.01)
 
         self._controller = DqnAgent(learning_rate=learning_rates[1],
                 num_actions=num_primitive_actions,
-                state_dims=[state_sizes[1] + num_subgoals],
+                state_dims=[state_sizes[0] + num_subgoals],
                 epsilon_end=0.01)
 
         self._subgoals = subgoals
@@ -71,9 +71,13 @@ class HierarchicalDqnAgent(object):
         # curr_subgoal is a 1-hot vector indicating the current subgoal selected by the meta-controller.
         curr_subgoal = np.array(self._subgoals[subgoal_index])
 
+        state = state.ravel()
+
         # Concatenate the environment state with the subgoal.
         controller_state = np.array(state)
         controller_state = np.concatenate((controller_state, curr_subgoal), axis=0)
+
+        controller_state = np.expand_dims(controller_state, axis=0)
 
         return np.copy(controller_state)
 

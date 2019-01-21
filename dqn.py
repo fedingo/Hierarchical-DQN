@@ -101,6 +101,8 @@ class DqnAgent(object):
 
     def sample(self, state):
         self._current_time_step += 1
+
+        #state = np.expand_dims(state, axis=0)
         q_values = self.sess.run(self._q_values, {self._state: state})
 
         epsilon = self._epsilons[min(self._current_time_step, self._epsilon_decay_steps - 1)]
@@ -121,7 +123,7 @@ class DqnAgent(object):
 
     def update(self):
         states, actions, rewards, next_states, terminals = self._replay_buffer.sample()
-        actions = zip(np.arange(len(actions)), actions)
+        actions = [a for a in zip(np.arange(len(actions)), actions)]
 
         if len(states) > 0:
             next_states_q_values = self.sess.run(self._target_q_values, {self._state: next_states})
