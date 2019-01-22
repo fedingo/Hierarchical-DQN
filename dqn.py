@@ -16,7 +16,7 @@ class DqnAgent(object):
     # Update the target network every TARGET_UPDATE timesteps.
     TARGET_UPDATE = 1000 #10000
 
-    def __init__(self, sess=None, learning_rate=0.00025, state_dims=[], num_actions=0,
+    def __init__(self, file_path=None, learning_rate=0.00025, state_dims=[], num_actions=0,
         epsilon_start=1.0, epsilon_end=0.1, epsilon_decay_steps=50000, replay_memory_init_size=None,
         target_update=None):
 
@@ -40,14 +40,18 @@ class DqnAgent(object):
 
         self._current_time_step = 0
 
+        self.step = 0
+
         with tf.Graph().as_default():
             self._construct_graph()
-            self._saver = tf.train.Saver()
-            if sess is None:
+            self._saver = tf.train.Saver(max_to_keep = 5)
+            if file_path is None:
                 self.sess = tf.Session()
+                self.sess.run(tf.global_variables_initializer())
             else:
-                self.sess = sess
-            self.sess.run(tf.global_variables_initializer())
+                self.sess = tf.Session()
+                self.load(file_path)
+            
 
     def _q_network(self, state):
 
@@ -102,9 +106,7 @@ class DqnAgent(object):
     def sample(self, state):
         self._current_time_step += 1
 
-        #state = np.expand_dims(state, axis=0)
         q_values = self.sess.run(self._q_values, {self._state: state})
-
         epsilon = self._epsilons[min(self._current_time_step, self._epsilon_decay_steps - 1)]
 
         e = random.random()
@@ -139,6 +141,17 @@ class DqnAgent(object):
         # Update the target q-network.
         if not self._current_time_step % self.TARGET_UPDATE:
             self.sess.run(self.target_update_ops)
+
+
+    def save(self, path):
+        save_path = self._saver.save(self.sess, path)#, global_step= self.step)
+        self.step += 1
+
+    def load(self, path):
+        print("Loading %s model" % path)
+        self._saver.restore(self.sess, path)
+        # self._saver = tf.train.import_meta_graph(path+'.meta')
+        # self._saver.restore(self.sess, tf.train.latest_checkpoint('weights/'))
 
 def clipped_error(x):
     return tf.where(tf.abs(x) < 1.0, 0.5 * tf.square(x), tf.abs(x) - 0.5)

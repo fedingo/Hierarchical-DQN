@@ -9,19 +9,22 @@ from dqn import DqnAgent
 import numpy as np
 #from qLearning import QLearningAgent
 import sys
+import os.path
 
 
 class HierarchicalDqnAgent(object):
     INTRINSIC_STEP_COST = -1    # Step cost for the controller.
+    THRESHOLD = 0.01
 
     def __init__(self,
-                 learning_rates=[0.1, 0.00025],
+                 learning_rates=[0.05, 0.00025],
                  state_sizes=[0, 0],
                  subgoals=None,
                  num_subgoals=0,
                  num_primitive_actions=0,
                  meta_controller_state_fn=None,
-                 check_subgoal_fn=None):
+                 check_subgoal_fn=None,
+                 load = True):
 
         """Initializes a hierarchical DQN agent.
 
@@ -36,15 +39,28 @@ class HierarchicalDqnAgent(object):
             check_subgoal_fn: function that checks if agent has satisfied a particular subgoal.
         """
 
+        subgoals = np.array(subgoals)
+
+        self.meta_path = "weights/meta/model"
+        self.control_path = "weights/control/model"
+
+        meta, control = None, None
+
+        if load:
+            meta = self.meta_path
+            control = self.control_path
+
         self._meta_controller = DqnAgent(state_dims=state_sizes,
-            num_actions=num_subgoals,
+            num_actions=subgoals.shape[0],
             learning_rate=learning_rates[0],
-            epsilon_end=0.01)
+            epsilon_end=0.01,
+            file_path = meta)
 
         self._controller = DqnAgent(learning_rate=learning_rates[1],
                 num_actions=num_primitive_actions,
-                state_dims=[state_sizes[0] + num_subgoals],
-                epsilon_end=0.01)
+                state_dims=[state_sizes[0] + subgoals.shape[1]],
+                epsilon_end=0.01,
+                file_path = control)
 
         self._subgoals = subgoals
         self._num_subgoals = num_subgoals
@@ -57,6 +73,11 @@ class HierarchicalDqnAgent(object):
         self._meta_controller_reward = 0
         self._intrinsic_time_step = 0
         self._episode = 0
+
+    def save (self):
+        print("Model saved")
+        self._meta_controller.save(self.meta_path)
+        self._controller.save(self.control_path)
 
     def get_meta_controller_state(self, state):
         returned_state = state
@@ -91,7 +112,7 @@ class HierarchicalDqnAgent(object):
     def subgoal_completed(self, state, subgoal_index):
         # Checks whether the controller has completed the currently specified subgoal.
         if self._check_subgoal_fn is None:
-            return state == self._subgoals[subgoal_index]
+            return np.sum((state - self._subgoals[subgoal_index])**2) < self.THRESHOLD
         else:
             return self._check_subgoal_fn(state, subgoal_index)
 
@@ -159,7 +180,7 @@ class HierarchicalDqnAgent(object):
         # If the meta-controller state is None, it means that either this is a new episode 
         # or a subgoal has just been completed.
         if self._meta_controller_state is None:
-            self._meta_controller_state = self.get_meta_controller_state(state)
+            self._meta_controller_state = state
             self._curr_subgoal = self._meta_controller.sample([self._meta_controller_state])
 
         controller_state = self.get_controller_state(state, self._curr_subgoal)
@@ -182,7 +203,7 @@ class HierarchicalDqnAgent(object):
         # If the meta-controller state is None, it means that either this is a new episode 
         # or a subgoal has just been completed.
         if self._meta_controller_state is None:
-            self._meta_controller_state = self.get_meta_controller_state(state)
+            self._meta_controller_state = state
             self._curr_subgoal = self._meta_controller.best_action([self._meta_controller_state])
 
         controller_state = self.get_controller_state(state, self._curr_subgoal)
@@ -192,7 +213,7 @@ class HierarchicalDqnAgent(object):
     def update(self):
         self._controller.update()
         # Only update meta-controller right after a meta-controller transition has taken place,
-        # which occurs only when either a subgoal has been completed or the agnent has reached a
+        # which occurs only when either a subgoal has been completed or the agent has reached a
         # terminal state.
         if self._meta_controller_state is None:
             self._meta_controller.update()

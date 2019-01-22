@@ -3,7 +3,7 @@
 """
 
 import os
-
+import sys
 import matplotlib
 matplotlib.use('Agg')
 
@@ -53,23 +53,35 @@ def meta_controller_state(state, original_state):
 
     return np.zeros()
 
+subgoals = [\
+            [- 1, 0],
+            [-.7, 0],
+            [-.3, 0],
+            [  0, 0],
+            [ .5, 0]
+        ]
+
 def check_subgoal(state, subgoal_index):
 
-    #
+    target = subgoals[subgoal_index]
 
-    return False
+    return (state[0] - target[0]) < 0.01
 
 
-def make_agent(agent_type, env):
+def make_agent(agent_type, env, load = True):
     if agent_type == 'dqn':
         return dqn.DqnAgent(state_dims=[2],
                             num_actions= env.action_space.n)
     elif agent_type == 'h_dqn':
         meta_controller_state_fn, check_subgoal_fn, num_subgoals = None, check_subgoal, 2
 
-        subgoals = np.random.rand(5,2)
+        # subgoals = [\
+        #     [-.7,-.2],
+        #     [-1,0],
+        #     [.5,.2],
+        #     [ 1,0]
+        # ]
         #clustering.get_cluster_fn(n_clusters=num_clusters, extra_bit=use_extra_bit)
-        #print(env.observation_space.shape)
 
         return hierarchical_dqn.HierarchicalDqnAgent(
             state_sizes= env.observation_space.shape,
@@ -77,17 +89,20 @@ def make_agent(agent_type, env):
             num_subgoals=num_subgoals,
             num_primitive_actions= env.action_space.n,
             meta_controller_state_fn=meta_controller_state_fn,
-            check_subgoal_fn=check_subgoal_fn)
+            check_subgoal_fn=check_subgoal_fn,
+            load = load)
             
 
 def run(env_name='MountainCar-v0',
         agent_type='dqn',
         num_iterations=10,
-        num_train_episodes=10,
+        num_train_episodes=100,
         num_eval_episodes=10,
         logdir=None,
         experiment_dir=None,
-        logfile=None):
+        logfile=None,
+        testing=False,
+        load_wieghts = True):
     """Function that executes RL training and evaluation.
 
     Args:
@@ -115,42 +130,50 @@ def run(env_name='MountainCar-v0',
     # env_test = Monitor(env_test, directory='videos/', video_callable=lambda x: True, resume=True)
     print('Made environment!')
     print(agent_type)
-    agent = make_agent(agent_type, env)
+    agent = make_agent(agent_type, env,  load = load_wieghts)
     print('Made agent!')
+
+    eval_rewards = []
+
+    if testing:
+        num_iterations = 1
 
     for it in range(num_iterations):
 
-        # Run train episodes.
-        for train_episode in range(num_train_episodes):
-            # Reset the environment.
-            state = env.reset()
-            #state = np.expand_dims(state, axis=0)
-            episode_reward = 0
+        if not testing:
+            # Run train episodes.
+            for train_episode in range(num_train_episodes):
+                # Reset the environment.
+                state = env.reset()
+                #state = np.expand_dims(state, axis=0)
+                episode_reward = 0
 
-            # Run the episode.
-            terminal = False
+                # Run the episode.
+                terminal = False
 
-            while not terminal:
-                action = agent.sample(state)
-                # Remove the do-nothing action.
-                if env_name == 'MountainCar-v0':
-                    if action == 1:
-                        env_action = 2
-                    else:
-                        env_action = action
+                while not terminal:
+                    action = agent.sample(state)
+                    # Remove the do-nothing action.
+                    if env_name == 'MountainCar-v0':
+                        if action == 1:
+                            env_action = 2
+                        else:
+                            env_action = action
 
-                next_state, reward, terminal, _ = env.step(env_action)
-                #next_state = np.expand_dims(next_state, axis=0)
-                env.render()
+                    next_state, reward, terminal, _ = env.step(env_action)
+                    #next_state = np.expand_dims(next_state, axis=0)
 
-                agent.store(state, action, reward, next_state, terminal)
-                agent.update()
+                    agent.store(state, action, reward, next_state, terminal)
+                    agent.update()
 
-                episode_reward += reward
-                # Update the state.
-                state = next_state
+                    episode_reward += reward
+                    # Update the state.
+                    state = next_state
 
-        eval_rewards = []
+        if not testing:
+            eval_rewards = []
+
+        agent.save()
 
         # Run eval episodes.
         for eval_episode in range(num_eval_episodes):
@@ -186,6 +209,7 @@ def run(env_name='MountainCar-v0',
                     env_action = action
 
                 next_state, reward, terminal, _ = env_test.step(env_action)
+                env_test.render()
 
                 #next_state = np.expand_dims(next_state, axis=0)
                 # env_test.render()
@@ -199,16 +223,19 @@ def run(env_name='MountainCar-v0',
 
             eval_rewards.append(episode_reward)
 
-        print(it)
-        print(np.mean(eval_rewards))
+        print("%d# Iteration: Mean Eval Score: %.2f" %(it, np.mean(eval_rewards))) 
 
-        #with open(experiment_dir + '/eval_rewards_' + str(it), 'wb') as f:
-        #    pickle.dump(eval_rewards, f)
+testing = False
+load = True
 
-        #log(logfile, it, eval_rewards)
+if len(sys.argv) > 1 and sys.argv[1] == "testing":
+    testing = True
+
+if len(sys.argv) > 1 and sys.argv[1] == "restart":
+    load = False
 
 #env_name= "MontezumaRevenge-v0",
 run(agent_type=FLAGS.agent_type, logdir=FLAGS.logdir, experiment_dir=FLAGS.experiment_dir,
-    logfile=FLAGS.logfile)
+    logfile=FLAGS.logfile, testing = testing, load_wieghts = load)
 
 
